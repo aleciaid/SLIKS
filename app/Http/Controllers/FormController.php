@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ImageCompressor;
 use App\Models\Applicant;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
@@ -33,7 +34,7 @@ class FormController extends Controller
             'jenis_kelamin' => ['required', 'in:L,P'],
             'ao' => ['required', 'string', 'max:255'],
             'jenis_permohonan_kredit' => ['required', 'string', 'max:255'],
-            'ktp' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+            'ktp' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:20480'],
             'captcha_answer' => ['required', 'integer'],
         ], [
             'nik.unique' => 'NIK sudah terdaftar',
@@ -51,7 +52,8 @@ class FormController extends Controller
 
         $file = $request->file('ktp');
         $filename = Str::random(48).'.enc';
-        $encryptedContent = Crypt::encryptString(file_get_contents($file->getRealPath()));
+        $compressedContent = ImageCompressor::compress($file->getRealPath(), 4096);
+        $encryptedContent = Crypt::encryptString($compressedContent);
 
         Storage::disk('local')->put('private/ktp/'.$filename, $encryptedContent);
 

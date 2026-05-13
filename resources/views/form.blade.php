@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow, noarchive">
     <title>Form Pengajuan KTP</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -93,7 +94,9 @@
 
                     <div>
                         <label for="ktp" class="block text-sm font-semibold text-slate-700">Upload KTP</label>
-                        <input id="ktp" name="ktp" type="file" accept="image/jpeg,image/png,image/webp" required class="mt-2 w-full rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm outline-none transition file:mr-4 file:rounded-lg file:border-0 file:bg-amber-500 file:px-4 file:py-2 file:font-semibold file:text-white hover:bg-slate-100 focus:border-amber-500 focus:ring-4 focus:ring-amber-100">
+                        <input id="ktpOriginal" type="file" accept="image/jpeg,image/png,image/webp" required class="mt-2 w-full rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm outline-none transition file:mr-4 file:rounded-lg file:border-0 file:bg-amber-500 file:px-4 file:py-2 file:font-semibold file:text-white hover:bg-slate-100 focus:border-amber-500 focus:ring-4 focus:ring-amber-100">
+                        <input id="ktp" name="ktp" type="file" class="hidden">
+                        <div id="fileSizeInfo" class="mt-2 hidden text-xs text-slate-500"></div>
                         <img id="preview" class="mt-4 hidden max-h-64 rounded-2xl border border-slate-200 object-contain shadow-sm" alt="Preview KTP">
                     </div>
 
@@ -121,27 +124,101 @@
     </main>
 
     <script>
-        const input = document.getElementById('ktp');
+        const originalInput = document.getElementById('ktpOriginal');
+        const hiddenInput = document.getElementById('ktp');
         const preview = document.getElementById('preview');
+        const fileSizeInfo = document.getElementById('fileSizeInfo');
         const form = document.getElementById('ktpForm');
         const button = document.getElementById('submitButton');
         const spinner = document.getElementById('spinner');
         const buttonText = document.getElementById('buttonText');
 
-        input.addEventListener('change', () => {
-            const file = input.files[0];
+        const MAX_SIZE_KB = 4096;
+        const MAX_DIMENSION = 2400;
 
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1048576).toFixed(2) + ' MB';
+        }
+
+        function compressImage(file) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    let { width, height } = img;
+
+                    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+                        const ratio = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
+                        width = Math.round(width * ratio);
+                        height = Math.round(height * ratio);
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    let quality = 0.85;
+                    const tryCompress = () => {
+                        canvas.toBlob((blob) => {
+                            if (blob.size > MAX_SIZE_KB * 1024 && quality > 0.2) {
+                                quality -= 0.1;
+                                tryCompress();
+                            } else {
+                                resolve(blob);
+                            }
+                        }, 'image/jpeg', quality);
+                    };
+                    tryCompress();
+                };
+                img.src = URL.createObjectURL(file);
+            });
+        }
+
+        originalInput.addEventListener('change', async () => {
+            const file = originalInput.files[0];
             if (!file) {
                 preview.classList.add('hidden');
                 preview.removeAttribute('src');
+                fileSizeInfo.classList.add('hidden');
                 return;
             }
 
-            preview.src = URL.createObjectURL(file);
+            const originalSize = file.size;
+            fileSizeInfo.classList.remove('hidden');
+
+            if (originalSize > MAX_SIZE_KB * 1024) {
+                fileSizeInfo.innerHTML = '<span class="text-amber-600 font-medium">⏳ Mengkompresi gambar dari ' + formatSize(originalSize) + '...</span>';
+
+                const compressedBlob = await compressImage(file);
+                const compressedFile = new File([compressedBlob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
+
+                const dt = new DataTransfer();
+                dt.items.add(compressedFile);
+                hiddenInput.files = dt.files;
+
+                fileSizeInfo.innerHTML = '<span class="text-emerald-600 font-medium">✅ Dikompresi: ' + formatSize(originalSize) + ' → ' + formatSize(compressedBlob.size) + '</span>';
+                preview.src = URL.createObjectURL(compressedBlob);
+            } else {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                hiddenInput.files = dt.files;
+
+                fileSizeInfo.innerHTML = '<span class="text-emerald-600 font-medium">✅ Ukuran OK: ' + formatSize(originalSize) + '</span>';
+                preview.src = URL.createObjectURL(file);
+            }
             preview.classList.remove('hidden');
         });
 
-        form.addEventListener('submit', () => {
+        form.addEventListener('submit', (e) => {
+            if (!hiddenInput.files || hiddenInput.files.length === 0) {
+                e.preventDefault();
+                fileSizeInfo.classList.remove('hidden');
+                fileSizeInfo.innerHTML = '<span class="text-red-600 font-medium">⚠️ Pilih file KTP terlebih dahulu</span>';
+                return;
+            }
             button.disabled = true;
             spinner.classList.remove('hidden');
             buttonText.textContent = 'Mengirim...';

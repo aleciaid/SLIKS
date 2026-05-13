@@ -8,11 +8,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('applicants', function (Blueprint $table) {
-            $table->enum('status', ['belum_diverifikasi', 'terverifikasi', 'expired'])
-                ->default('belum_diverifikasi')
-                ->after('ktp_file');
-        });
+        if (!Schema::hasColumn('applicants', 'status')) {
+            Schema::table('applicants', function (Blueprint $table) {
+                $table->enum('status', ['belum_diverifikasi', 'terverifikasi', 'expired'])
+                    ->default('belum_diverifikasi')
+                    ->after('ktp_file');
+            });
+        }
     }
 
     public function down(): void

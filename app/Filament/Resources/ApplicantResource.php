@@ -11,6 +11,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Helpers\ImageCompressor;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -66,14 +67,15 @@ class ApplicantResource extends Resource
                     ->downloadable(false)
                     ->openable(false)
                     ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
-                    ->maxSize(4096)
+                    ->maxSize(20480)
                     ->disk('local')
                     ->directory('tmp/ktp')
                     ->visibility('private')
                     ->required(fn (string $operation): bool => $operation === 'create')
                     ->saveUploadedFileUsing(function ($file): string {
                         $filename = Str::random(48).'.enc';
-                        $encryptedContent = Crypt::encryptString(file_get_contents($file->getRealPath()));
+                        $compressedContent = ImageCompressor::compress($file->getRealPath(), 4096);
+                        $encryptedContent = Crypt::encryptString($compressedContent);
 
                         Storage::disk('local')->put('private/ktp/'.$filename, $encryptedContent);
 
